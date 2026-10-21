@@ -15,7 +15,7 @@ Set BENCH_HANDLER to sum to compute the sum of 10,000 numbers in every job, or t
 
 ## Observed on 21 October 2026
 
-Host: Intel Core i7-13700H, 20 logical processors, 15.7 GiB RAM, Windows 10.0.26300, Docker Desktop Linux engine 29.8.0. Node client v22.17.0. PostgreSQL 17.11; C++ release build, GCC 12.2, libpq 15.19. Two scheduler processes; four execution lanes per worker; queue limit 8; eight HTTP producers; 80 jobs per sample. A separate development stack was also present on the host. These were short single samples without dedicated-machine isolation or a warm-up protocol.
+Host: Intel Core i7-13700H, 20 logical processors, 15.7 GiB RAM, Windows 10.0.26300, Docker Desktop Linux engine 29.8.0. Docker reported 20 CPUs and approximately 7.6 GiB allocated memory. Node client v22.17.0. PostgreSQL 17.11; C++ release build, GCC 12.2, libpq 15.19. Two scheduler processes; four execution lanes per worker; queue limit 8; eight HTTP producers; 80 jobs per sample. A separate development stack was also present on the host. These were short single samples without dedicated-machine isolation or a warm-up protocol.
 
 | Workload | Workers | Submission jobs/s | HTTP-observed completions/s | Completion p50 / p95 / p99 (ms) |
 | --- | ---: | ---: | ---: | --- |
@@ -26,4 +26,4 @@ Host: Intel Core i7-13700H, 20 logical processors, 15.7 GiB RAM, Windows 10.0.26
 
 All four samples completed 80/80 jobs with zero extra attempts and zero rate-limited requests. Exact observations and UTC start times are in results/. Latencies use durable created_at and finished_at timestamps rounded to milliseconds by the HTTP JSON representation. Completion throughput is count divided by client-observed wall time; it includes polling and HTTP delays and is not a server-only execution rate. Completion latency and this wall-time rate measure different intervals.
 
-These observations do not establish sustained capacity, a general scaling factor, a database saturation point, scheduler CPU cost under load, or production suitability. No-op and sleep work are synthetic overhead measurements. The sum sample does actual numeric work but is still a small microbenchmark. Repeated longer runs, error bars, CPU/memory sampling during load, and database query analysis remain future performance work.
+Measurements were recorded during implementation before the final coordination hardening; rerun the current checkout before comparing changes. These observations do not establish sustained capacity, a general scaling factor, a database saturation point, scheduler CPU cost under load, or production suitability. No-op and sleep work are synthetic overhead measurements. The sum sample does actual numeric work but is still a small microbenchmark. Repeated longer runs, error bars, CPU/memory sampling during load, and database query analysis remain future performance work.
