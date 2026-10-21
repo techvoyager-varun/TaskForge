@@ -105,6 +105,9 @@ test(
           ).rowCount,
         'crashed job recovery',
       );
+      processes[1]!.child.kill('SIGKILL');
+      processes[2]!.child.kill('SIGKILL');
+      processes.push(startEngine('scheduler'), startEngine('scheduler'));
       const jobs = (
         await db.query(
           "INSERT INTO jobs(project_id,queue_id,type,payload) SELECT $1,$2,'sleep','{\"duration_ms\":100}' FROM generate_series(1,24) RETURNING id",

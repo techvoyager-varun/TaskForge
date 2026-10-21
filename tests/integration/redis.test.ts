@@ -123,6 +123,20 @@ test(
       await until(async () => a.client.isReady && b.client.isReady, 'Redis reconnect');
       await new Promise((r) => setTimeout(r, 5100));
       assert.equal((await get('/project')).status, 200);
+      assert.equal(
+        (await a.command().configGet('maxmemory-policy'))['maxmemory-policy'],
+        'noeviction',
+      );
+      await a.command().configSet('maxmemory', '1');
+      try {
+        assert.equal(
+          (await get('/project')).status,
+          503,
+          'memory exhaustion must fail closed instead of evicting admission counters',
+        );
+      } finally {
+        await a.command().configSet('maxmemory', '67108864');
+      }
       assert.ok(a.counters.errors > 0);
       assert.equal(b.counters.hits, 1);
       assert.ok(a.counters.misses >= 3);

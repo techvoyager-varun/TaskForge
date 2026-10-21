@@ -32,6 +32,7 @@ jobs:
       - name: Run concurrency tests with the selected sanitizer
         shell: bash
         run: |
+          set +e
           set -o pipefail
           ctest --test-dir build --output-on-failure 2>&1 | tee sanitizer.log
           status=${PIPESTATUS[0]}

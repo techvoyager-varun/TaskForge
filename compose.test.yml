@@ -69,5 +69,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     command:
       [sh, -c, 'ctest --test-dir build --output-on-failure && npm test && npm run test:integration']

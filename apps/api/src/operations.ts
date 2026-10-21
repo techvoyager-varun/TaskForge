@@ -1,3 +1,4 @@
+import { infrastructureSnapshot } from './infrastructure.js';
 import type { RedisLayer } from './redis.js';
 import { Router } from 'express';
 import type pg from 'pg';
@@ -36,7 +37,7 @@ export async function snapshot(pool: pg.Pool, project: string) {
 export function operationsRouter(pool: pg.Pool, redis?: RedisLayer, shutdown?: AbortSignal) {
   const router = Router();
   router.get('/infrastructure', async (_req, res) =>
-    res.json({ data: { redis: redis?.metrics() ?? { configured: false, available: false } } }),
+    res.json({ data: await infrastructureSnapshot(pool, res.locals.project.id, redis) }),
   );
   router.get('/project', (_req, res) => res.json({ data: res.locals.project }));
   router.post('/queues', async (req, res) => {
@@ -125,10 +126,32 @@ export function operationsRouter(pool: pg.Pool, redis?: RedisLayer, shutdown?: A
       lines.push(
         `taskforge_completion_latency_ms{percentile="${percentile}"} ${data.latency[`${percentile}_ms`]}`,
       );
+    const infrastructure = await infrastructureSnapshot(pool, res.locals.project.id, redis);
+    lines.push(
+      '# TYPE taskforge_redis_available gauge',
+      `taskforge_redis_available ${infrastructure.redis.available ? 1 : 0}`,
+    );
+    for (const name of ['hits', 'misses', 'errors'] as const)
+      lines.push(
+        `# TYPE taskforge_cache_${name}_total counter`,
+        `taskforge_cache_${name}_total ${infrastructure.redis[name]}`,
+      );
+    lines.push(
+      '# TYPE taskforge_outbox_pending gauge',
+      `taskforge_outbox_pending ${infrastructure.kafka.outbox.pending}`,
+    );
+    for (const component of infrastructure.kafka.health) {
+      lines.push(
+        `taskforge_pipeline_available{component="${component.component}"} ${component.available ? 1 : 0}`,
+      );
+      if (component.lag !== null)
+        lines.push(`taskforge_kafka_lag{component="${component.component}"} ${component.lag}`);
+    }
     res.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n');
   });
   const streams = new Map<string, number>();
   router.get('/events', async (req, res) => {
+    if (shutdown?.aborted) throw new HttpError(503, 'shutting_down', 'Server is shutting down');
     const project: string = res.locals.project.id;
     if ((streams.get(project) ?? 0) >= 10)
       throw new HttpError(429, 'stream_limit', 'Project has reached its 10 live stream limit');
@@ -159,7 +182,7 @@ export function operationsRouter(pool: pg.Pool, redis?: RedisLayer, shutdown?: A
       release();
       throw error;
     }
-    if (res.destroyed) {
+    if (res.destroyed || res.writableEnded) {
       release();
       return;
     }

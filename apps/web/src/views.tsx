@@ -1,3 +1,4 @@
+import { InfrastructureView } from './Infrastructure';
 import { useState, type FormEvent } from 'react';
 import { CheckCheck, Activity, Layers, TriangleAlert, ArrowUpRight, Cpu, Plus } from 'lucide-react';
 import { api } from './api';
@@ -270,7 +271,7 @@ export function QueuesView({ queues }: { queues: Queue[] }) {
     </section>
   );
 }
-export function MetricsView({ overview }: { overview: Overview }) {
+export function MetricsView({ overview, token }: { overview: Overview; token: string }) {
   return (
     <>
       <div className="metric-grid three">
@@ -298,6 +299,7 @@ export function MetricsView({ overview }: { overview: Overview }) {
         </div>
         <Throughput overview={overview} />
       </section>
+      <InfrastructureView token={token} />
       <p className="muted small">
         Latency includes queue wait, execution and retries. Empty datasets display zero. Prometheus
         metrics are available at the authenticated /api/v1/metrics endpoint.

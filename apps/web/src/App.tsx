@@ -387,7 +387,7 @@ export default function App() {
               )}
               {page === 'Workers' && <WorkersView workers={workers} />}
               {page === 'Queues' && <QueuesView queues={queues} />}
-              {page === 'Metrics' && <MetricsView overview={overview} />}
+              {page === 'Metrics' && <MetricsView overview={overview} token={token} />}
               {page === 'Workflows' && (
                 <WorkflowView
                   token={token}

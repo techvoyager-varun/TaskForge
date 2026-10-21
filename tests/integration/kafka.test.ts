@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -33,6 +35,7 @@ test(
     const client = kafka(),
       admin = client.admin();
     let producer = client.producer({ idempotent: true, maxInFlightRequests: 1 });
+    let retained: Awaited<ReturnType<typeof startConsumer>> | undefined;
     let live: Awaited<ReturnType<typeof startConsumer>> | undefined, rebuilt: typeof live;
     const engines: ReturnType<typeof startEngine>[] = [];
     try {
@@ -357,8 +360,33 @@ test(
         ).rows;
       assert.deepEqual(await counts(namespace), await counts(replay));
       assert.equal(await observedLag(db, admin, replay, name), 0);
+      const retainedTopic = 'taskforge.replay.' + randomUUID();
+      const publisherUri = new URL(testDatabase!);
+      publisherUri.searchParams.set('options', '-c role=taskforge_publisher');
+      await promisify(execFile)(
+        process.execPath,
+        ['--import', 'tsx', 'scripts/replay-events.ts', retainedTopic],
+        {
+          env: { ...process.env, DATABASE_URL: publisherUri.toString().replace(/\+/g, '%20') },
+          timeout: 20000,
+        },
+      );
+      const retainedNamespace = 'retained_' + randomUUID().replaceAll('-', '');
+      retained = await startConsumer(
+        consumerDb,
+        retainedNamespace,
+        'group-' + retainedNamespace,
+        retainedTopic,
+      );
+      await until(
+        async () => (await observedLag(db, admin, retainedNamespace, retainedTopic)) === 0,
+        'retained PostgreSQL outbox replay',
+      );
+      assert.deepEqual(await projection(namespace), await projection(retainedNamespace));
+      assert.deepEqual(await counts(namespace), await counts(retainedNamespace));
     } finally {
       await Promise.all(engines.map((e) => stopProcess(e.child)));
+      await retained?.close();
       await live?.close();
       await rebuilt?.close();
       await producer.disconnect().catch(() => {});

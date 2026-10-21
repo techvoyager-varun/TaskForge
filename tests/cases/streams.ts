@@ -9,7 +9,8 @@ const token = 'tf_' + randomBytes(32).toString('hex');
 await db.query("INSERT INTO projects(name,token_hash) VALUES('stream-check',$1)", [
   createHash('sha256').update(token).digest('hex'),
 ]);
-const server = createApp(db).listen(0, '127.0.0.1');
+const shutdown = new AbortController();
+const server = createApp(db, undefined, { shutdown: shutdown.signal }).listen(0, '127.0.0.1');
 await new Promise<void>((r) => server.once('listening', r));
 const controllers = Array.from({ length: 11 }, () => new AbortController());
 try {
@@ -27,7 +28,19 @@ try {
     'concurrent requests must reserve only ten stream slots',
   );
   assert.equal(results.filter((r) => r.status === 429).length, 1);
-  console.log('PASS: concurrent SSE connection quota');
+  shutdown.abort();
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.all(results.filter((r) => r.status === 200).map((r) => r.text())),
+      new Promise((_, reject) => {
+        deadline = setTimeout(() => reject(new Error('SSE streams did not end on shutdown')), 2000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(deadline);
+  }
+  console.log('PASS: concurrent SSE connection quota and graceful stream shutdown');
 } finally {
   controllers.forEach((c) => c.abort());
   server.closeAllConnections();
