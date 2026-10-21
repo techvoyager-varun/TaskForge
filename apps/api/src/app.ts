@@ -30,7 +30,7 @@ export function createApp(pool:pg.Pool,webDirectory?:string){
   const tokenHash=createHash('sha256').update(match[1]!).digest('hex');
   const project=await pool.query<{id:string;name:string}>('SELECT id,name FROM projects WHERE token_hash=$1',[tokenHash]);
   if(!project.rows[0])throw new HttpError(401,'unauthorized','Invalid project token');
-  res.locals.project=project.rows[0];next();
+  res.locals.project=project.rows[0];res.locals.tokenHash=tokenHash;next();
  });
  app.use('/api/v1/jobs',jobsRouter(pool));
  app.use('/api/v1/workflows',workflowsRouter(pool));

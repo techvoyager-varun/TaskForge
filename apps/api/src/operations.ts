@@ -72,18 +72,35 @@ export function operationsRouter(pool:pg.Pool){
  router.get('/events',async(req,res)=>{
   const project:string=res.locals.project.id;
   if((streams.get(project)??0)>=10)throw new HttpError(429,'stream_limit','Project has reached its 10 live stream limit');
-  // Fetch an actual snapshot before opening the stream so database errors remain regular HTTP errors.
-  const initial=await snapshot(pool,project);
+  // Reserve synchronously, before the first await, so concurrent opens cannot bypass the cap.
   streams.set(project,(streams.get(project)??0)+1);
+  let closed=false,busy=false,ticks=0;
+  let timer:ReturnType<typeof setInterval>|undefined,expires:ReturnType<typeof setTimeout>|undefined;
+  function release(){
+   if(closed)return;closed=true;clearInterval(timer);clearTimeout(expires);
+   const remaining=(streams.get(project)??1)-1;if(remaining)streams.set(project,remaining);else streams.delete(project);
+  }
+  res.once('close',release);
+  let initial;
+  try{initial=await snapshot(pool,project);}catch(error){release();throw error;}
+  if(res.destroyed){release();return;}
   res.set({'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders();
   res.write('event: snapshot\ndata: '+JSON.stringify(initial)+'\n\n');
-  let busy=false;
-  const timer=setInterval(()=>{
-   if(busy)return;busy=true;
-   snapshot(pool,project).then(data=>{if(!res.destroyed)res.write('event: snapshot\ndata: '+JSON.stringify(data)+'\n\n');}).catch(()=>res.end()).finally(()=>{busy=false;});
+  timer=setInterval(()=>{
+   if(busy||closed)return;busy=true;ticks++;
+   void (async()=>{
+    try{
+     if(ticks%15===0){
+      const auth=await pool.query('SELECT id FROM projects WHERE id=$1 AND token_hash=$2',[project,res.locals.tokenHash]);
+      if(!auth.rowCount){res.end();return;}
+     }
+     const data=await snapshot(pool,project);
+     if(res.writableLength>65536){res.end();return;}
+     if(!res.destroyed&&!closed)res.write('event: snapshot\ndata: '+JSON.stringify(data)+'\n\n');
+    }catch{res.end();}finally{busy=false;}
+   })();
   },2000);
-  const expires=setTimeout(()=>res.end(),15*60*1000);
-  res.on('close',()=>{clearInterval(timer);clearTimeout(expires);const remaining=(streams.get(project)??1)-1;if(remaining)streams.set(project,remaining);else streams.delete(project);});
+  expires=setTimeout(()=>res.end(),15*60*1000);
  });
  return router;
 }
