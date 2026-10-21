@@ -9,7 +9,7 @@ Spec: architecture/execution-model.md; requirements supplied in E:\TaskForge.md.
 
 - All work and generated tools stay inside E:\TaskForge.
 - Commit coherent increments with honest timestamps; never fabricate development history.
-- Automated tests live under ignored .local/ and are never staged, per the owner's latest instruction.
+- Historical policy, superseded by docs/audit/implementation-plan.md: the current audit requires public reproducible tests and CI.
 - Keep the existing main checkout, as explicitly requested; do not create another worktree.
 - Execute directly in this chat under the user's instruction to start.
 - No fabricated benchmark data or claims that unrun checks passed.

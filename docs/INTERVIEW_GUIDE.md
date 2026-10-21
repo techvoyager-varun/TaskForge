@@ -1,107 +1,61 @@
 # TaskForge interview guide
 
-## Explain the project in one minute
+## A concise explanation
 
-TaskForge accepts background jobs over HTTP and persists them in PostgreSQL. A C++ scheduler chooses eligible work and assigns it to registered workers without exceeding queue or worker capacity. C++ workers use bounded thread pools to run allowlisted handlers. Leases, heartbeats and increasing attempt numbers let the system recover after failures and reject late results. Workflows add dependency ordering; a React dashboard displays real state and execution history.
+TaskForge accepts work over an authenticated API, stores it durably, schedules it across C++ workers, and coordinates dependent jobs as a directed acyclic graph. PostgreSQL is the source of truth. Redis shares API quotas and caches version-checked job snapshots. Kafka distributes lifecycle facts to rebuildable analytics. The React dashboard displays these actual records and health measurements.
 
-The main engineering work is the ownership protocol: submission, assignment, execution, renewal, completion and recovery each have a defined database transaction boundary. The system targets at-least-once execution and explicitly does not promise exactly-once external effects.
+```mermaid
+flowchart LR
+ Client --> API[Express API]
+ API <--> Redis[Redis quotas and cache]
+ API --> PG[(PostgreSQL jobs / attempts / outbox)]
+ Scheduler[C++ scheduler replicas] <--> PG
+ Workers[C++ bounded worker pools] <--> PG
+ PG --> Publisher[Restartable outbox publisher]
+ Publisher --> Kafka[Kafka lifecycle topic]
+ Kafka --> Consumer[Consumer group]
+ Consumer --> Analytics[(PostgreSQL analytics / inbox / offsets)]
+ API --> Analytics
+ API --> Dashboard[React dashboard]
+```
 
-## Why each technology exists
+## Explain the implementation
 
-| Technology | Responsibility and reason |
-| --- | --- |
-| C++20 | Scheduler/worker lifetime management, bounded thread pools, stop tokens and explicit concurrency |
-| CMake | Portable compiler/dependency configuration and sanitizer builds |
-| libpq | Direct parameterized PostgreSQL communication from C++ |
-| PostgreSQL | Durable records, row locks, transactional state transitions, constraints and fencing |
-| Node/Express/TypeScript | HTTP contracts, authentication, orchestration submission and manageable API code |
-| Zod | Reject malformed payloads, unsafe handler types and invalid graphs before persistence |
-| React/Vite/Tailwind | Operations UI, efficient local build and consistent responsive styling |
-| React Flow | Inspect graph execution and open per-node results |
-| Docker Compose | Reproducible services with independent credentials and internal networking |
-| Prometheus text format | Integrates real state metrics with standard monitoring tools |
-| Redis/gRPC/Kafka | Deferred: none is required for the current durable contract |
+1. **What does it do?** Queues predefined asynchronous handlers and tracks attempts, retries, results and workflow dependencies. The job is durable before the API acknowledges submission. Start in `apps/api/src/jobs.ts`.
+2. **Why use a distributed queue?** HTTP clients need not wait for slow work, processes can fail independently, and additional workers can process independent jobs. Queue limits provide backpressure. It does not make a single indivisible handler execute in parallel.
+3. **Why C++?** C++20 jthreads, stop tokens, RAII and a bounded pool make ownership and cooperative shutdown explicit. The project demonstrates systems concurrency; its benchmarks do not prove C++ is faster than every alternative. Read `services/core/include/taskforge/thread_pool.hpp` and `services/worker/main.cpp`.
+4. **Why Express/TypeScript?** HTTP auth, validation and dashboard integration remain straightforward. Zod validates contracts and PostgreSQL parameters bind values. The API does not schedule jobs in memory.
+5. **How do workers run concurrently?** Each lane owns a libpq connection and accepts one assignment at a time. Worker and queue row locks serialize capacity decisions. Four lanes per worker are the default; queue limits may be smaller than combined worker capacity.
+6. **How are conflicting claims prevented?** The scheduler invokes transactional PostgreSQL procedures. Worker/queue/job locks and conditional state updates grant one current attempt; SKIP LOCKED avoids waiting on already selected rows. `next_assignment` conditionally changes ASSIGNED to RUNNING and checks the actual update, preventing a stale READ COMMITTED join from handing the same attempt to another lane. See migrations 001 and 003 and `tests/cases/acceptance-gate.mjs`.
+7. **What are leases and heartbeats?** Workers heartbeat every second and are eligible while recently seen. A job lease expires after six seconds unless renewed; each attempt also has a fixed deadline. An attempt number fences later writes. A heartbeat is evidence of recent process contact, not proof it will execute the next assignment.
+8. **How does crash recovery work?** A scheduler reconciles expired assignments, records failure/timeout, and schedules a retry after backoff or sends exhausted work to dead letter. A recently dead worker can remain eligible briefly and waste another assignment. The measured recovery sample took 15.66 seconds and three attempts; do not promise recovery within one six-second lease.
+9. **Why at least once?** A handler may perform an external effect and crash before PostgreSQL confirms completion. A retry can repeat that effect. Fencing prevents an old attempt from overwriting current durable state; it cannot undo a remote HTTP request. External handlers must use stable job IDs as idempotency keys, remote unique constraints or transactional business ledgers.
+10. **How do DAGs run?** Kahn validation rejects cycles in O(V+E). Root jobs become eligible at workflow start; a child waits for every predecessor to complete. Failure/cancellation propagates through descendants. Retrying a workflow clones a new execution with root lineage, preserving history. Read `workflows.ts` and `tests/cases/workflows.ts`.
+11. **Why Redis?** Replica-local counters cannot enforce one shared API quota. Lua atomically increments/sets expiry. Cache keys contain project/job/state version; a PostgreSQL version lookup prevents stale writes or missing invalidation from making old state current. Cache hits still depend on PostgreSQL. Outage/OOM rejects admission with 503 and cache operations bypass failure. Existing C++ execution continues. See REDIS.md.
+12. **Why Kafka?** It decouples durable lifecycle delivery and replayable analytics from job execution. Consumers never compete with the custom scheduler. One consumer group maintains an idempotent SQL projection; adding a new namespace/group can rebuild it. Kafka is not a second job-state authority.
+13. **How does the outbox work?** A lifecycle trigger inserts an event within the job transaction. A publisher claims a batch, waits for Kafka acknowledgement, then conditionally records delivery. A crash after the Kafka ack but before the SQL update causes duplicate publication. Consumer inbox/projection/offset commit atomically, so duplicate processing does not increment analytics twice. Versions prevent out-of-order regression. See KAFKA.md and `apps/events/src/pipeline.ts`.
+14. **How does it scale?** Add workers for available queue concurrency, add schedulers for failover/coordination throughput, and API replicas behind a configured trusted proxy with shared Redis admission. One PostgreSQL writer still coordinates assignments. Kafka partitions bound consumer group parallelism. More schedulers do not guarantee faster execution: the measured one-worker/two-scheduler sample was slower than one/one.
+15. **What are the limits?** Single-node PostgreSQL and Kafka, trusted internal Kafka networking without TLS/SASL/ACLs, no per-user RBAC, cooperative handlers, no resource sandbox per job, manual history retention, and no automatic outbox/inbox retention. Benchmarks are short laptop samples. This is a tested portfolio platform, not a production certification.
 
-## Follow one job
+## Common follow-up questions
 
-1. The API hashes the bearer token and identifies the project. It validates the queue and payload.
-2. A project advisory lock serializes quota/idempotency checks. The API inserts the job and audit record, then commits before replying.
-3. The scheduler lists live non-draining workers. `dispatch_job` locks a worker, checks its active leases, locks an eligible queue, rechecks queue capacity, and locks one eligible job.
-4. The assignment transaction increments the attempt number, inserts an ASSIGNED attempt, gives the job RUNNING ownership and a lease/deadline, and commits.
-5. `next_assignment` locks a candidate job and conditionally changes the attempt from ASSIGNED to RUNNING. If that conditional update affects no row, nothing is returned. Locking the job alone would not refresh an old snapshot of the joined attempt.
-6. A worker lane runs the fixed handler. Its checkpoints renew only its current unexpired lease; sleep handlers check about every 50 ms and renew at most every 400 ms.
-7. `finish_job` locks the job and accepts the outcome only if the worker, attempt number, state and unexpired lease still match.
-8. A successful result is committed to PostgreSQL. An error schedules retry or dead-lettering. Failure to confirm completion is logged as a database error rather than success.
+**Does Kafka producer idempotence make the outbox exactly once?** No. PostgreSQL and Kafka commit independently. The claim-token update fences stale publishers, while the inbox deduplicates consumer effects.
 
-## Thread pool
+**Are events strictly ordered per job?** A key chooses one partition, but multiple publisher batches and retries may arrive out of lifecycle order. Projection state_version handles that. Event counts count unique facts, not arrival order.
 
-`services/core/include/taskforge/thread_pool.hpp` owns joinable `std::jthread` objects. A mutex protects a deque, and a condition variable suspends idle threads. Pending work is bounded to twice the thread count; submit returns false when full or shutting down. Shutdown rejects new submissions, clears pending callbacks, requests stop on active lanes, wakes waiters and joins all threads before destroying shared state.
+**What if a malformed event appears?** Invalid schemas and out-of-range versions get a durable failure marker and advance the consumed position. The original record remains in Kafka during retention. Repair the schema and replay into a fresh namespace. Database transaction failures throw instead of acknowledging unapplied work.
 
-The worker submits one long-lived database polling lane per pool thread. Each lane owns its libpq connection; connections are never shared concurrently across threads. This is a fixed execution pool, not an unbounded thread per job. Handlers do not launch detached threads.
+**What happens at Redis memory capacity?** noeviction preserves existing counters; new Redis writes can fail. Admission returns 503, cache writes are best effort, and TTL expiration releases memory. A Redis restart resets ephemeral quota windows, not durable jobs.
 
-Queue push/pop is O(1) under the mutex; memory is O(T) for T threads and bounded pending callbacks. Thread scheduling and handler cost dominate actual runtime.
+**What did you measure?** Four 80-job sleep10ms configurations; 20.15, 27.77, 18.70 and 34.82 observed completions/s for worker/scheduler counts 1/1, 2/1, 1/2 and 2/2. Cache means 12.21 ms hit versus 19.07 ms forced miss for ~50KB detail. 1,619 events published in 0.784 seconds including outbox claim/ack writes. Read the raw artifact and caveats before citing any number.
 
-## Locks, leases and retries
+## Demonstrate and defend it
 
-Worker/queue/job locks make assignment atomic. A queue row is a common serialization point for its capacity count. Multiple schedulers use SKIP LOCKED to avoid waiting on candidates owned by another transaction. The attempt-status conditional update separately makes assignment acceptance atomic between worker lanes.
+```sh
+node scripts/setup-env.mjs
+docker compose up -d --build --scale worker=2 --scale scheduler=2
+docker compose run --rm admin "Interview demo"
+docker compose -f compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
+```
 
-The monotonic attempt number is a fencing token: a worker holding attempt 1 cannot finish attempt 2. Lease expiry also rejects a late result before a replacement is assigned. Heartbeats answer whether a worker may receive more work; per-job lease renewal answers whether a specific execution still owns work. These are related but different mechanisms.
-
-Maintenance and workflow cancellation acquire the same transaction advisory lock before locking workflow/job rows. This avoids maintenance's jobs-then-workflow order deadlocking cancellation's workflow-then-jobs order. Project quota locks are separate and shared by job submission, workflow creation and manual retry.
-
-Automatic backoff is 500 ms times 2 to the attempt-minus-one, capped at five minutes, with jitter between half and the full base. Max attempts counts assignments, including lost assignments to a worker that looked live briefly after a crash. Manual standalone retries grant three more assignments without resetting fencing.
-
-## DAGs
-
-Kahn's algorithm validates workflows. Build an adjacency list and indegrees, visit each zero-indegree node, reduce child indegrees and append newly eligible nodes. If visited count differs from node count, a cycle exists. A queue index avoids repeatedly shifting an array, preserving O(V+E) time and O(V+E) space.
-
-The validated graph and all nodes/edges are inserted atomically. Drafts do not execute. After a run starts, a pending node becomes READY only if no predecessor is incomplete. Completion of multiple parents cannot duplicate the node because promotion is a conditional row update, and maintenance is serialized. Failed/cancelled dependencies cancel pending descendants. The current version orders nodes but does not automatically feed outputs into their payloads.
-
-## Files to open during an interview
-
-| File / symbol | What it demonstrates |
-| --- | --- |
-| database/migrations/001_execution.sql: dispatch_job, finish_job, maintain_jobs | Capacity, fencing and recovery transactions |
-| database/migrations/003_acceptance_and_retry_quota.sql: next_assignment, retry_job | Fresh-state acceptance and quota-safe retries |
-| services/worker/main.cpp: lane, execute | Execution lifecycle and durable acknowledgement |
-| services/core/include/taskforge/thread_pool.hpp | Bounded work, synchronization and RAII shutdown |
-| services/core/include/taskforge/handlers.hpp: ExecutionContext | Cooperative renewal/cancellation and a safe registry |
-| packages/contracts/src/index.ts: topologicalOrder | Graph validation and request contracts |
-| apps/api/src/jobs.ts | Project scope, idempotency and transactional quota |
-| apps/api/src/operations.ts | Real metrics, bounded streams and token revalidation |
-| apps/api/src/pagination.ts | Timestamp-accurate cursor pagination |
-| benchmarks/run.mjs | Reproducible HTTP workload measurement |
-
-## Common questions
-
-**Why not exactly once?** A worker can perform an external effect and lose the database connection before recording completion. Retrying preserves progress but may repeat the effect. Exactly-once effects require a shared transaction or an external system's idempotent operation, not merely a queue flag.
-
-**Does submission idempotency solve worker duplicates?** No. It prevents two job records for the same project/key/request. Attempt fencing protects the durable result; application-level idempotency protects external effects.
-
-**What if two workers finish simultaneously?** Ownership/attempt checks and the job row lock allow only the current unexpired attempt's durable completion. Even before that, conditional attempt acceptance prevents two lanes from legitimately accepting the same current assignment.
-
-**What if PostgreSQL is down?** New submissions cannot be acknowledged. Existing workers cannot renew/confirm results and must stop claiming success. Once connections return, durable pending work and expired leases are reconciled. Database HA is not implemented.
-
-**Can two schedulers overfill a queue?** They must lock the same queue row and recheck its active lease count before granting another. Worker capacity is similarly serialized by the worker row lock.
-
-**Is scheduling fair?** Queues get round-robin opportunities by last dispatch time; jobs within a queue are priority first. There is no weighted per-tenant fairness or starvation prevention for low-priority jobs under continuous higher-priority arrivals.
-
-**What is the scheduler's complexity?** Database indexes support ready lookup, but correlated active-count/eligibility queries scan qualifying rows. It is not honest to claim O(log N) end-to-end scheduling from a B-tree alone. At scale, measure query plans and consider maintaining transactional counters or sharded coordination.
-
-**What did you actually measure?** Four 80-job samples, documented with host details and raw output. Two workers observed 46.36 HTTP-completions/s on synthetic no-ops in one short run. These are not sustained-capacity or production claims. A 10,000-number sum sample also checked a real result.
-
-**How were failures tested?** A real worker was killed mid-execution, a scheduler was killed while another continued, PostgreSQL restarted with five pending jobs, competing schedulers processed 30 jobs under queue limit 2, and stale attempts/timeouts/DAG order were checked against real database state. Tests are local rather than published, at the repository owner's request.
-
-## Demonstration commands
-
-Start with `docker compose up -d --build --scale worker=2 --scale scheduler=2`. Create a project, connect the dashboard and submit several sleep jobs; inspect queue occupancy and workers.
-
-For a deterministic worker-crash demo, scale to one worker, submit a 20-second sleep with `timeout_ms=60000` and `max_attempts=3`, wait until its attempt has started, then run `docker compose kill -s SIGKILL worker`. Restart with `docker compose up -d --scale worker=1`. Watch the new fenced attempt after lease recovery. Effects can repeat; the attempt log explains why.
-
-Kill one of two scheduler containers with `docker kill taskforge-scheduler-1` and submit another job; the second scheduler continues. Restart the killed container afterward. The dashboard's workflow creation dialog supplies a diamond graph. Run it and inspect node attempt timestamps to demonstrate ordering. Create a fail handler with `fail_until_attempt=1` to demonstrate successful retry, or a large threshold with max_attempts=2 to demonstrate dead-lettering.
-
-## Defensible resume wording
-
-Implemented a PostgreSQL-backed distributed job queue with a C++20 scheduler and bounded worker pools, an authenticated TypeScript API, and a live React workflow dashboard; exercised lease fencing, worker recovery, competing schedulers and DAG ordering with local fault-injection checks.
-
-Do not add exactly-once guarantees, production traffic figures, a published automated suite, Redis/gRPC/OpenTelemetry integration, or sustained throughput numbers to this description: those are not implemented or established here.
+Keep the newly printed project token private. Connect the browser dashboard, submit a sum, run a diamond workflow and open Metrics. For explicit outage demos, set TASKFORGE_TOKEN/TASKFORGE_QUEUE for a disposable local demo project and run `node benchmarks/stack-faults.mjs`. It stops/restarts publisher, Kafka and Redis, so use the local demo stack only. Replay commands are in KAFKA.md. Explain one observed failure window before discussing performance. Use RESUME_GUIDE.md for defensible resume bullets.

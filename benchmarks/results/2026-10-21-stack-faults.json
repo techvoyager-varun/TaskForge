@@ -1,0 +1,215 @@
+{
+  "measured_at": "2026-10-21T16:35:38.908Z",
+  "checks": [
+    {
+      "name": "publisher stopped; real job completes and outbox remains pending",
+      "pending": 5
+    },
+    {
+      "name": "publisher restart drains committed outbox",
+      "passed": true
+    },
+    {
+      "name": "broker stopped; durable C++ job completes with pending events",
+      "passed": true
+    },
+    {
+      "name": "broker restart delivers pending events and consumer reaches zero lag",
+      "passed": true
+    },
+    {
+      "name": "Redis stop rejects admission; acknowledged job survives and API reconnects",
+      "passed": true
+    },
+    {
+      "name": "real diamond DAG completed through API and C++ processes",
+      "passed": true
+    }
+  ],
+  "initial": {
+    "redis": {
+      "configured": true,
+      "available": true,
+      "hits": 0,
+      "misses": 0,
+      "errors": 0,
+      "hit_rate": null
+    },
+    "kafka": {
+      "outbox": {
+        "pending": 0,
+        "delivered": 375,
+        "oldest_pending_seconds": 0,
+        "max_delivery_attempts": 3
+      },
+      "projection": [
+        {
+          "aggregate_type": "workflow",
+          "status": "COMPLETED",
+          "total": 1
+        },
+        {
+          "aggregate_type": "job",
+          "status": "COMPLETED",
+          "total": 332
+        }
+      ],
+      "events": [
+        {
+          "event_type": "JOB_ASSIGNED",
+          "total": "10"
+        },
+        {
+          "event_type": "JOB_COMPLETED",
+          "total": "10"
+        },
+        {
+          "event_type": "JOB_CREATED",
+          "total": "10"
+        },
+        {
+          "event_type": "JOB_READY",
+          "total": "10"
+        },
+        {
+          "event_type": "JOB_SNAPSHOT",
+          "total": "322"
+        },
+        {
+          "event_type": "JOB_STARTED",
+          "total": "10"
+        },
+        {
+          "event_type": "WORKFLOW_COMPLETED",
+          "total": "1"
+        },
+        {
+          "event_type": "WORKFLOW_CREATED",
+          "total": "1"
+        },
+        {
+          "event_type": "WORKFLOW_RUNNING",
+          "total": "1"
+        }
+      ],
+      "health": [
+        {
+          "component": "consumer:live",
+          "available": true,
+          "lag": "0",
+          "error_count": "33",
+          "heartbeat_at": "2026-10-21T16:35:36.613Z"
+        },
+        {
+          "component": "publisher",
+          "available": true,
+          "lag": null,
+          "error_count": "16",
+          "heartbeat_at": "2026-10-21T16:35:37.975Z"
+        }
+      ],
+      "lag_scope": "shared deployment"
+    },
+    "execution": {
+      "assignments_last_minute": 0,
+      "failed_attempts": 0,
+      "attempts": 332,
+      "queue_wait_p95_ms": 1638.4319999999998,
+      "execution_p95_ms": 29.828
+    },
+    "measured_at": "2026-10-21T16:35:38.007Z"
+  },
+  "final": {
+    "redis": {
+      "configured": true,
+      "available": true,
+      "hits": 0,
+      "misses": 6,
+      "errors": 24,
+      "hit_rate": 0
+    },
+    "kafka": {
+      "outbox": {
+        "pending": 0,
+        "delivered": 413,
+        "oldest_pending_seconds": 0,
+        "max_delivery_attempts": 3
+      },
+      "projection": [
+        {
+          "aggregate_type": "workflow",
+          "status": "COMPLETED",
+          "total": 2
+        },
+        {
+          "aggregate_type": "job",
+          "status": "COMPLETED",
+          "total": 339
+        }
+      ],
+      "events": [
+        {
+          "event_type": "JOB_ASSIGNED",
+          "total": "17"
+        },
+        {
+          "event_type": "JOB_COMPLETED",
+          "total": "17"
+        },
+        {
+          "event_type": "JOB_CREATED",
+          "total": "17"
+        },
+        {
+          "event_type": "JOB_READY",
+          "total": "17"
+        },
+        {
+          "event_type": "JOB_SNAPSHOT",
+          "total": "322"
+        },
+        {
+          "event_type": "JOB_STARTED",
+          "total": "17"
+        },
+        {
+          "event_type": "WORKFLOW_COMPLETED",
+          "total": "2"
+        },
+        {
+          "event_type": "WORKFLOW_CREATED",
+          "total": "2"
+        },
+        {
+          "event_type": "WORKFLOW_RUNNING",
+          "total": "2"
+        }
+      ],
+      "health": [
+        {
+          "component": "consumer:live",
+          "available": true,
+          "lag": "0",
+          "error_count": "47",
+          "heartbeat_at": "2026-10-21T16:36:20.161Z"
+        },
+        {
+          "component": "publisher",
+          "available": true,
+          "lag": null,
+          "error_count": "24",
+          "heartbeat_at": "2026-10-21T16:36:20.833Z"
+        }
+      ],
+      "lag_scope": "shared deployment"
+    },
+    "execution": {
+      "assignments_last_minute": 7,
+      "failed_attempts": 0,
+      "attempts": 339,
+      "queue_wait_p95_ms": 1635.6949999999997,
+      "execution_p95_ms": 29.891399999999997
+    },
+    "measured_at": "2026-10-21T16:36:20.995Z"
+  }
+}

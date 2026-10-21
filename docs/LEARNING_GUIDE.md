@@ -1,63 +1,83 @@
-# Learn TaskForge progressively
+# Learn, debug and modify TaskForge
 
-## 1. Run the system before reading implementation details
+## 1. Run the actual system
 
-Follow the README Compose setup and create a project. Submit an echo job from the dashboard. Inspect its payload, result, attempt and execution logs. Notice that refreshing the page or restarting workers does not remove the job: persistence is in PostgreSQL.
+Run the README Compose setup and create a project with the admin CLI. Keep its token private. Open the dashboard and submit a sum with numbers [2,3,7]. The result should be 12. Inspect the job, attempts and logs. Restart a worker: the durable job record remains in PostgreSQL.
 
-Read `packages/contracts/src/index.ts` to see the input shapes. Change handler selection in the submission dialog and observe different validated payloads. Try a sum payload with a string instead of a number and observe rejection before it becomes durable work.
+Start with `packages/contracts/src/index.ts`. A handler name selects one predefined payload shape. Unknown fields, cycles, excessive graphs and arbitrary command names are rejected. Add input validation before expanding a handler contract.
 
-## 2. Trace the HTTP transaction
+## 2. Follow one HTTP transaction
 
-Read `apps/api/src/app.ts`, then `jobs.ts` and `database.ts`. Authentication derives a project from a token hash. Every resource query uses that project ID. Submission takes a project advisory lock, checks the queue and active quota, then inserts a job and audit record inside one transaction. No success response precedes COMMIT.
+Read `apps/api/src/app.ts`, `jobs.ts` and `database.ts`. Authentication hashes a project token and looks up the project. SQL queries scope resources to that project. Submission takes a project advisory lock, checks quota and queue ownership, inserts a job and audit record, then commits. An idempotency key plus canonical request hash allows a client to retry an uncertain HTTP response without creating another job.
 
-Submit twice with the same idempotency key and body using the README example. Both responses identify the same job. Change the payload but retain the key and observe 409. Canonical JSON sorts object keys recursively so property ordering alone does not change the fingerprint.
+Try the same key twice with the same body, then a changed body. Expect the same job, then HTTP409. An empty key is rejected with HTTP400. These are separate concerns from worker-side repeated effects.
 
-## 3. Read the durable state machine
+## 3. Understand the tables
 
-Open migration 001. Start with the jobs and job_attempts tables, foreign keys, partial indexes and validate_job_transition trigger. A job tracks the current state; attempts preserve each ownership grant and outcome. FAILED and TIMED_OUT are attempt outcomes; the job retries or eventually becomes DEAD_LETTERED.
+Read migration 001 for projects, queues, workers, jobs and attempts. A job describes current durable state; attempts preserve separate execution grants. FAILED/TIMED_OUT are attempt outcomes, while the job may enter RETRY_WAIT or DEAD_LETTERED. Constraints and triggers reject illegal transitions even when a C++ process calls the database directly.
 
-Next read migrations 002 and 003. Migrations are an append-only history, so the latest implementation of next_assignment and retry_job is in 003. Do not change an applied migration: the runner checks its checksum.
+Migrations are immutable after application. The migration ledger stores their checksums. Add a numbered migration rather than editing a deployed one. Migration 003 contains important procedure corrections; reading only migration 001 misses the currently installed definitions.
 
-## 4. Understand assignment before execution
+## 4. Trace a C++ assignment
 
-Read `services/scheduler/main.cpp` and `dispatch_job`. Each scheduler repeatedly runs maintenance and inspects live workers. Database locking makes the choice safe across processes. Queue and worker row locks serialize their capacity checks. The ready index supports selection by queue, priority and time.
+`services/scheduler/main.cpp` repeatedly invokes PostgreSQL dispatch and maintenance. The database locks eligible worker and queue rows, rechecks capacity and assigns a READY job. `next_assignment` accepts only an ASSIGNED attempt and must successfully change that exact row to RUNNING. Two concurrent snapshots alone are not sufficient evidence of ownership.
 
-Then read latest `next_assignment`. Selection and acceptance are separate operations. The joined ASSIGNED status may come from an older SELECT snapshot, so the actual attempt update must still require ASSIGNED and must succeed before returning a job. This is a concrete example of why a lock on one table is not a fresh-state check on another table.
+Each worker lane has its own `Database` object. `thread_pool.hpp` bounds pending work and owns jthreads. `runtime.hpp` carries assignment/lease/stop state. `handlers.hpp` contains the fixed registry. In `database.hpp`, async libpq plus poll bounds connect/query I/O, and results are drained before the connection is reused. No scheduler rewrite or Kafka claiming loop is involved.
 
-## 5. Study C++ ownership and shutdown
+## 5. Reason about failure
 
-`database.hpp` wraps PGconn/PGresult in unique_ptr deleters, making exception paths free resources. Each worker lane owns its own connection. `thread_pool.hpp` owns every thread and synchronizes its pending deque. `runtime.hpp` provides stop-aware waits and serialized structured output.
+Kill a worker after a sleep attempt starts. The external work may have partially run. Lease expiry and backoff permit a later attempt; the attempt number rejects old completion/renewal. Recently dead workers can still be eligible until their heartbeat ages out, so recovery can involve more than one wasted assignment.
 
-Read the worker's main function, lane loop and execute function. On shutdown, no detached thread outlives pool state. On a database error, a lane reconnects after waiting. It never logs a durable completion unless finish_job confirms it.
+A server-side statement timeout does not bound a silent network peer. The public TCP blackhole test accepts/forwards the initial database connection, then drops traffic while keeping sockets open. The C++ client must throw its own deadline instead of hanging. DNS resolution still lies outside this socket deadline.
 
-## 6. Learn leases, fences and retries through a failure
+Cancellation is cooperative. Built-in handlers periodically renew/check ownership and stop tokens. If you add a handler with an external effect, use a stable job ID for business idempotency. Never add arbitrary shell execution to the public payload contract.
 
-Use the interview guide's single-worker crash demo. The original worker's last heartbeat is initially still fresh. Its job lease expires, the scheduler records failure, and a new attempt eventually runs. The attempt counter increases even for assignments lost to a crash.
+## 6. Follow a workflow
 
-Read ExecutionContext and renew_lease. A handler must cooperate by calling checkpoints; a lease is not a mechanism for killing arbitrary operating-system work. Read finish_job and note that both the fence and lease expiry are checked before persisting results. Explain why an external effect could still repeat.
+`workflows.ts` validates a DAG and writes draft nodes/edges. Starting it releases eligible roots. Maintenance releases a child only after all parents have completed; failed/cancelled ancestors prevent descendant execution. Workflow cancellation shares the maintenance advisory-lock ordering. Retry creates a new execution and preserves root lineage.
 
-## 7. Add a handler safely
+The public diamond test verifies parallel predecessors and join ordering using actual attempt timestamps. Use it to understand what must remain true when changing orchestration.
 
-A new handler requires a contract in packages/contracts, an allowlisted function in handlers.hpp, and an allowed database type in a new migration. Keep its payload bounded, avoid shell execution, and call checkpoints during long work. Add a local ignored behavioral check for payload rejection, correct result and cancellation/timeout behavior. Compile and run a real persisted job before committing the feature. Do not add handler-specific mechanisms to the scheduler.
+## 7. Learn the Redis boundary
 
-## 8. Understand workflows
+`redis.ts` owns one reconnecting client, atomic Lua admission and cache counters. Offline buffering is disabled and command/queue limits prevent indefinite work buildup. Redis failure returns503 at admission; a successful PostgreSQL job does not disappear.
 
-Start with topologicalOrder, which uses indegrees and an adjacency list. Draw a diamond: A precedes B and C; both precede D. Follow how the API transaction inserts nodes and edges, how starting changes the workflow state, and how maintenance promotes eligible nodes.
+Migration 004 advances a job version for job and attempt changes. Job detail first validates project ownership/current version in PostgreSQL, then looks up that version's cache key. A miss reads job+attempts in one SQL snapshot and caches it. A stale writer populates an old version, which is no longer current. Active TTL5s and terminal TTL60s bound retention. This trades one cheap database read for avoiding the larger detail snapshot; it is not a database outage cache.
 
-Try a cycle in the workflow editor and confirm that creation fails. Run a valid graph and inspect parent completion times versus child assignment times. Try a failing root: its descendants cancel after its retries are exhausted. Retrying the workflow produces another execution, not rewritten history. Outputs are currently inspected separately rather than automatically bound to downstream inputs.
+In `tests/integration/redis.test.ts`, inspect the two API replicas, exact concurrent quota, wrong-project entry, real TCP outage/reconnect and noeviction/OOM check. Do not replace these with mocks when changing Redis failure behavior.
 
-## 9. Connect monitoring to real records
+## 8. Learn the outbox boundary
 
-Read operations.ts. Counts, throughput buckets and latency percentiles are database queries. The SSE stream sends those snapshots rather than generating decorative data. The dashboard also queries jobs, queues, workers and workflow records to render actual states.
+Migration 005 captures lifecycle changes in the same transaction as job/workflow updates. Compact events exclude payload/result/token material. `publisher.ts` claims rows and sends them to Kafka. Inspect the ack-loss injection in the Kafka integration test: Kafka accepts real records, then the simulated publisher failure prevents delivered_at from being written. A later publisher repeats the records.
 
-Study pagination.ts and its use of cursor_created_at. JavaScript Date loses PostgreSQL's sub-millisecond precision; a cursor must preserve the original timestamp or it can skip rows. Display timestamps may be rounded without changing the traversal token.
+`pipeline.ts` inserts an inbox event UUID and derived effects in one SQL transaction. Only a newer state_version replaces a projection. Handler success precedes Kafka offset acknowledgement. Invalid schemas get a persistent marker; SQL transaction failures roll back and retry. The consumer never writes jobs.
 
-## 10. Measure before optimizing
+Replay uses another group and namespace. KAFKA.md explains the difference between Kafka retention replay and a repeatable-read snapshot of retained PostgreSQL events. Rebuild analytics without resetting live processing.
 
-Run benchmarks/run.mjs against a dedicated queue as described in benchmarks/README.md. Compare no-op scheduling overhead, timed sleeps and numeric sum work. Vary one worker count at a time and repeat samples. Completion latency includes waiting and retries; client-observed completion throughput also includes HTTP/polling overhead. No single sample proves sustained capacity.
+## 9. Read measurements accurately
 
-Potential next investigations are query plans, incremental metrics, starvation prevention, shared API rate limiting and PostgreSQL failover. Keep the durable lease contract unchanged while experimenting. Document an observed bottleneck before adding infrastructure.
+The existing Overview/Jobs/Workers/Workflow views use live API data. `Infrastructure.tsx` adds Redis readiness/hit counts, project outbox, shared Kafka lag, dispatches, queue wait and attempt execution p95. Missing lag is unavailable, not0. A broker connection is not proof of a running consumer; lifecycle heartbeats also matter.
 
-## Validation policy
+Cache counters are per API process. Outbox/analytics counts are project scoped. Broker lag and pipeline heartbeat/error status are deployment operational data. The analytics projection can retain historical terminal jobs after source-job retention, so it is not a second current-state authority.
 
-The owner's preference is to keep automated tests under ignored `.local/`, outside published Git history. This repository therefore ships build/type-check commands, benchmark tooling and a verification report, but not the local test bodies. That reduces independent reproducibility of the reported fault checks. The reported tests were actually executed; do not infer that GitHub CI runs them.
+## 10. Run and extend verification
+
+```sh
+npm ci
+npm test
+npm run typecheck
+npm run build
+docker compose -f compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
+```
+
+The Docker suite builds C++/GoogleTest, starts isolated PostgreSQL/Redis/Kafka, migrates and runs real process/API/fault assertions. It requires a test-named database and truncates test fixtures. Never point it at a real project database. CI runs the same public suite. TESTING.md explains sanitizers and unsupported runtime reporting.
+
+For a change, identify the invariant first, add a regression that can fail for the relevant behavior, then modify the smallest relevant boundary. A scheduler change should preserve fencing/capacity tests; an event change should preserve rollback, deduplication and replay; an API change should preserve tenant and input checks. Do not remove assertions just because timing becomes inconvenient.
+
+## 11. Measure before optimizing
+
+`benchmarks/audit.ts` runs in the isolated test stack with real C++ processes and HTTP submissions. It compares worker/scheduler counts, records percentiles/contention samples, times hits/forced misses and event publishing, and kills a worker. Raw JSON contains machine details and limitations. One short run is not proof of linear scaling. Queue/worker polling and transactional event writes add latency; optimize only after identifying a repeatable bottleneck.
+
+## 12. Bound your production claims
+
+Read FINAL_ENGINEERING_REPORT.md and RESUME_GUIDE.md. This implementation demonstrates useful invariants but still needs replicated infrastructure, authenticated encrypted Kafka networking, tested backups, coordinated event retention, larger performance studies and deployment security work. Explain what a successful test proves and what its environment does not cover.

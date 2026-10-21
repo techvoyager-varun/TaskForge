@@ -77,7 +77,7 @@ Call `POST /api/v1/workflows/:id/run` to start it. Independent nodes run in para
 - Project-scoped job, workflow, log and metric access using hashed 256-bit bearer tokens.
 - Live SSE snapshots, searchable jobs, attempt history, worker heartbeats, DAG visualization and authenticated Prometheus-format metrics.
 
-C++ is used for explicit lifetime management and concurrency control; Express/TypeScript keeps the client-facing API straightforward. PostgreSQL makes the coordination protocol transactional and inspectable. Redis, Kafka, gRPC and OpenTelemetry are deferred because this version does not require a second coordination or transport system.
+C++ is used for explicit lifetime management and concurrency control; Express/TypeScript keeps the client-facing API straightforward. PostgreSQL makes the coordination protocol transactional and inspectable. Redis supplies shared API admission and version-qualified job caching. A PostgreSQL transactional outbox feeds Kafka lifecycle events into an idempotent analytics projection. The C++ scheduler retains scheduling authority; gRPC and OpenTelemetry remain outside this implementation.
 
 ## Development and validation
 
@@ -87,16 +87,17 @@ npm run typecheck
 npm run build
 ```
 
-For C++ on Linux with CMake 3.20+, GCC 12+, libpq and nlohmann-json installed:
+For C++ on Linux with CMake 3.20+, GCC 12+, libpq, nlohmann-json and GTest installed:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j2
+ctest --test-dir build --output-on-failure
 ```
 
 Optional build instrumentation: `-DTASKFORGE_SANITIZER=address` or `thread`. `npm run dev:api` needs a `DATABASE_URL` for an API-role login; `npm run dev:web` proxies to the API on port 3000. Compose is the supported fresh-start route, including database setup. See [verification](docs/verification.md) for checks actually run and [benchmarks](benchmarks/README.md) for measured results.
 
-**At the repository owner's request, automated tests are kept locally in Git-ignored `.local/` and are not published.** CI performs TypeScript checks, production builds, C++ sanitizer builds, and a production dependency audit. It does not run the private test suite; a clean clone cannot reproduce that suite.
+The current audit request supersedes the earlier local-only test policy. Public tests in `tests/` reproduce C++ concurrency, real PostgreSQL/API/process faults, Redis replica limits/outages and Kafka outbox/replay behavior. CI executes them. See [testing](docs/TESTING.md).
 
 ## Documentation
 
@@ -105,8 +106,18 @@ Optional build instrumentation: `-DTASKFORGE_SANITIZER=address` or `thread`. `np
 - [Failure model](docs/failure-model/README.md)
 - [Operations](docs/OPERATIONS.md)
 - [Interview guide](docs/INTERVIEW_GUIDE.md) and [learning guide](docs/LEARNING_GUIDE.md)
-- [Engineering report](docs/ENGINEERING_REPORT.md)
+- [Final engineering report](docs/FINAL_ENGINEERING_REPORT.md) and [resume guide](docs/RESUME_GUIDE.md)
+- [Redis behavior](docs/REDIS.md) and [Kafka/outbox/replay](docs/KAFKA.md)
 
 ## Current boundaries
 
 This is a local-development and portfolio implementation, not a certified production service. It uses project access tokens rather than individual accounts/RBAC, has no cross-region consensus, and relies on trusted service hosts and PostgreSQL availability. Built-in handlers cooperate with cancellation; arbitrary uninterruptible custom handlers are not supported. History retention is manual and bounded to standalone jobs; workflow history remains retained. Metrics aggregate database records and are intended for modest workloads; large installations need incremental aggregates and longer performance studies.
+
+Run all reproducible checks from a clean checkout:
+
+```sh
+docker compose -f compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
+docker compose -f compose.test.yml down -v
+```
+
+The test stack is disposable and publishes no infrastructure ports. Production Compose keeps Redis and Kafka private; see the operations guide for credentials, restart behavior and limitations.

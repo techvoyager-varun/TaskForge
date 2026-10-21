@@ -2,7 +2,7 @@
 
 ## Lifecycle
 
-`node scripts/setup-env.mjs` generates four independent database passwords in ignored `.env`. Compose starts PostgreSQL, waits for its health check, applies migrations and role provisioning, then starts the API, schedulers and workers. Images compile source from the tracked repository and do not copy `.local/`, `.env`, build output or Git metadata.
+`node scripts/setup-env.mjs` preserves existing secrets and appends missing independent database/Redis credentials in ignored `.env`. Compose starts PostgreSQL, waits for its health check, applies migrations and role provisioning, then starts the API, schedulers, workers and independent Kafka publisher/consumer. Redis and Kafka have separate health checks; Kafka data persists in kafka-data. Images compile source from the tracked repository and do not copy `.local/`, `.env`, build output or Git metadata.
 
 ```powershell
 docker compose up -d --build --scale worker=2 --scale scheduler=2
@@ -17,7 +17,7 @@ The owner CLI creates a default queue and prints a token once. Avoid redirecting
 
 The owner login is used only by migration/admin containers. The API, scheduler and worker have independent login credentials and non-login capability roles. Worker logins cannot directly select jobs, scheduler logins cannot read projects, and API logins cannot execute dispatch. API reads are project-filtered; this version does not use row-level security.
 
-The API container and C++ containers run as non-root users with read-only root filesystems, dropped capabilities and no-new-privileges. The database port is not published. Only loopback HTTP is exposed by default. Remote deployment requires a deliberate TLS/reverse-proxy setup and shared rate limiting when adding API replicas.
+The API container and C++ containers run as non-root users with read-only root filesystems, dropped capabilities and no-new-privileges. The database port is not published. Only loopback HTTP is exposed by default. Redis now shares admission limits across API replicas. Remote deployment still requires a deliberate TLS/reverse-proxy setup, trusted proxy/IP configuration and Kafka authentication/ACLs.
 
 ## Schema upgrades
 
@@ -60,3 +60,11 @@ The SSE dashboard reads actual two-second database snapshots. Database aggregati
 ## Backups and shutdown
 
 Use PostgreSQL's normal pg_dump/restore procedure for backups and verify restores in an isolated environment. No backup automation is shipped. `docker compose stop` preserves the named volume. Worker SIGTERM marks the worker draining, requests cooperative handler stop, joins threads, and leaves unfinished leases recoverable. A forced kill loses in-memory execution but not acknowledged jobs.
+
+## Redis, events and replay
+
+Read [Redis](REDIS.md) and [Kafka](KAFKA.md) for failure behavior and executable replay commands. The Metrics page and authenticated /api/v1/infrastructure expose current Redis status, per-process cache counters, project outbox depth/age, deployment consumer lag and project execution/queue-wait p95. Unavailable lag is not rendered as zero. No Redis/Kafka host ports are published. Redis noeviction preserves active rate counters under memory pressure; API admission fails closed on Redis outage/OOM while existing C++ execution continues.
+
+The outbox, inbox, analytics and failure-marker tables currently retain all records independently of terminal-job retention. Monitor their disk usage. Kafka retains seven days and uses a single broker: replay older retained SQL events with the supplied snapshot tool. Back up PostgreSQL and Kafka volumes separately; do not infer end-to-end recovery from a single backup.
+
+API SIGTERM ends SSE streams before closing HTTP/SQL connections. C++ uses bounded client I/O in addition to server timeouts. DNS resolution and arbitrary custom handlers are outside that deadline guarantee.

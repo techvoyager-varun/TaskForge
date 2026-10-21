@@ -2,7 +2,7 @@
 
 ## Boundaries
 
-The Express API authenticates project tokens, validates payloads, and writes job requests. A separate C++20 scheduler selects available workers and asks PostgreSQL to grant leases. C++ workers execute a fixed registry of handlers through a bounded thread pool and persist results with a fenced compare-and-update. The React dashboard reads real API data. Redis is deferred until notifications demonstrably need it; durable coordination never depends on it.
+The Express API authenticates project tokens, validates payloads, and writes job requests. A separate C++20 scheduler selects available workers and asks PostgreSQL to grant leases. C++ workers execute a fixed registry of handlers through a bounded thread pool and persist results with a fenced compare-and-update. The React dashboard reads real API data. Redis provides shared admission and version-qualified job caching. PostgreSQL lifecycle triggers atomically append outbox events; Kafka publishers/consumers maintain rebuildable analytics. Scheduling authority remains with PostgreSQL and C++.
 
 The first increment uses PostgreSQL/libpq directly between trusted services. This avoids an additional RPC failure boundary. Database procedures own transactional invariants; only the scheduler calls dispatch. Dedicated database credentials grant the API submission/inspection functions and workers only execution functions. Network access to PostgreSQL is internal in Compose.
 
@@ -29,7 +29,7 @@ Submission validates references and rejects duplicate edges, self-dependencies a
 
 ## Failures and security
 
-Database failure means fail closed: no acknowledgement before durable insert, no success claim without durable completion. Restart preserves requests, leases and workflow state. A crash after claiming wastes at most a lease interval. Redis failure has no effect because Redis is not in the initial execution path. Cancellation and timeout are cooperative for built-in handlers; arbitrary shell/code submission is forbidden. Credentials come from environment variables; API tokens are hashed; SQL uses bound parameters; API reads and writes are project scoped.
+Database failure means fail closed: no acknowledgement before durable insert, no success claim without durable completion. Restart preserves requests, leases and workflow state. A crash can waste a lease interval and further assignments while a dead heartbeat is still eligible; backoff also extends recovery. Redis failure rejects new API admission with 503 while existing durable execution continues. Kafka failure accumulates the outbox. Cancellation and timeout are cooperative for built-in handlers; arbitrary shell/code submission is forbidden. Credentials come from environment variables; API tokens are hashed; SQL uses bound parameters; API reads and writes are project scoped.
 
 ## Alternatives
 
@@ -37,4 +37,8 @@ A Node-only queue would simplify deployment but would bypass the C++ scheduling 
 
 ## Verification
 
-Local checks must exercise real PostgreSQL and real C++ processes: duplicate submissions, competing schedulers, worker capacity, stale completions, crash recovery, retry exhaustion, cancellation, DAG ordering and cross-project access. Only observed results will be reported. Tests are local and ignored by Git at the owner's request.
+Local checks must exercise real PostgreSQL and real C++ processes: duplicate submissions, competing schedulers, worker capacity, stale completions, crash recovery, retry exhaustion, cancellation, DAG ordering and cross-project access. Only observed results will be reported. The latest audit supersedes the earlier local-only policy: tests are public and CI executes them. See TESTING.md.
+
+## Cache and event consistency
+
+See [Redis](../REDIS.md) and [Kafka](../KAFKA.md). Every job detail first checks a durable project-owned version; cache snapshots never override PostgreSQL. Events may duplicate or reorder. The analytics inbox and monotonic projection commit with durable consumed offsets before Kafka acknowledgement. Replay uses a separate namespace. At-least-once job effects remain the handler author’s responsibility.

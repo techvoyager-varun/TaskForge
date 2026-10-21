@@ -29,10 +29,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -116,10 +113,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -201,10 +195,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -298,10 +289,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -395,10 +383,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -414,10 +399,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -519,10 +501,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -645,10 +624,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -742,10 +718,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -839,10 +812,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -936,10 +906,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1050,10 +1017,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1145,10 +1109,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1250,10 +1211,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1347,10 +1305,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1444,10 +1399,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1541,10 +1493,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1638,10 +1587,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1752,10 +1698,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1849,10 +1792,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -1936,10 +1876,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -2033,10 +1970,7 @@
                   "properties": {
                     "data": {},
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -2262,6 +2196,22 @@
         },
         "parameters": []
       }
+    },
+    "/infrastructure": {
+      "get": {
+        "summary": "Current Redis, outbox, Kafka projection and execution measurements",
+        "responses": {
+          "401": {
+            "description": "Project token required"
+          },
+          "200": {
+            "description": "Project-scoped counts and shared pipeline health; unavailable lag is null"
+          },
+          "503": {
+            "description": "Redis admission unavailable or durable read unconfirmed"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2275,16 +2225,11 @@
     "schemas": {
       "Error": {
         "type": "object",
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "properties": {
           "error": {
             "type": "object",
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "properties": {
               "code": {
                 "type": "string"
@@ -2304,10 +2249,7 @@
       "JobRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "queue_id",
-          "type"
-        ],
+        "required": ["queue_id", "type"],
         "properties": {
           "queue_id": {
             "type": "string",
@@ -2315,13 +2257,7 @@
           },
           "type": {
             "type": "string",
-            "enum": [
-              "noop",
-              "echo",
-              "sum",
-              "sleep",
-              "fail"
-            ]
+            "enum": ["noop", "echo", "sum", "sleep", "fail"]
           },
           "payload": {
             "type": "object",
@@ -2354,9 +2290,7 @@
       "QueueRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "properties": {
           "name": {
             "type": "string",
@@ -2374,12 +2308,7 @@
       "WorkflowRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "name",
-          "queue_id",
-          "nodes",
-          "edges"
-        ],
+        "required": ["name", "queue_id", "nodes", "edges"],
         "properties": {
           "name": {
             "type": "string",
@@ -2397,10 +2326,7 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "key",
-                "type"
-              ],
+              "required": ["key", "type"],
               "properties": {
                 "key": {
                   "type": "string",
@@ -2408,13 +2334,7 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "noop",
-                    "echo",
-                    "sum",
-                    "sleep",
-                    "fail"
-                  ]
+                  "enum": ["noop", "echo", "sum", "sleep", "fail"]
                 },
                 "payload": {
                   "type": "object",
@@ -2451,10 +2371,7 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "from",
-                "to"
-              ],
+              "required": ["from", "to"],
               "properties": {
                 "from": {
                   "type": "string"

@@ -1,0 +1,260 @@
+{
+  "measured_at": "2026-10-21T16:25:57.416Z",
+  "machine": {
+    "platform": "linux",
+    "release": "6.18.54.1-microsoft-standard-WSL2",
+    "arch": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13700H",
+    "logical_cores": 20,
+    "visible_ram_gib": 7.619029998779297,
+    "node": "v22.23.4",
+    "scope": "Docker Desktop Linux test container on Windows host"
+  },
+  "configuration": {
+    "postgres": 17,
+    "redis": "7.4",
+    "kafka": "3.9.1",
+    "cxx": "GCC 12 C++20 Debug",
+    "samples_per_worker_case": 80
+  },
+  "scenarios": [
+    {
+      "workers": 1,
+      "schedulers": 1,
+      "worker_threads": 4,
+      "queue_limit": 8,
+      "jobs": 80,
+      "handler": "sleep",
+      "duration_ms": 10,
+      "submission_concurrency": 8,
+      "submission_seconds": 1.7999552699999994,
+      "submission_jobs_per_second": 44.44554891633503,
+      "observed_wall_seconds": 3.9705815999999996,
+      "observed_completion_jobs_per_second": 20.148181817998655,
+      "submission_latency_ms": {
+        "samples": 80,
+        "mean": 169.6288628999999,
+        "p50": 159.86621399999967,
+        "p95": 252.9614679999995,
+        "p99": 373.5287019999996
+      },
+      "completion_latency_ms": {
+        "samples": 80,
+        "mean": 1611.3764125,
+        "p50": 1669.444,
+        "p95": 2165.112,
+        "p99": 2255.883
+      },
+      "queue_wait_ms": {
+        "samples": 80,
+        "mean": 1563.8307499999996,
+        "p50": 1624.863,
+        "p95": 2117.181,
+        "p99": 2204.205
+      },
+      "execution_ms": {
+        "samples": 80,
+        "mean": 15.664837499999999,
+        "p50": 15.101,
+        "p95": 20.318,
+        "p99": 31.038
+      },
+      "extra_attempts": 0,
+      "database_contention": {
+        "lock_wait_samples": 41,
+        "max_lock_waiters": 0,
+        "deadlocks_delta": 0
+      }
+    },
+    {
+      "workers": 2,
+      "schedulers": 1,
+      "worker_threads": 4,
+      "queue_limit": 8,
+      "jobs": 80,
+      "handler": "sleep",
+      "duration_ms": 10,
+      "submission_concurrency": 8,
+      "submission_seconds": 1.1090568129999991,
+      "submission_jobs_per_second": 72.13336509209115,
+      "observed_wall_seconds": 2.8803937740000003,
+      "observed_completion_jobs_per_second": 27.773980322455728,
+      "submission_latency_ms": {
+        "samples": 80,
+        "mean": 107.33573906249994,
+        "p50": 111.72806599999967,
+        "p95": 130.34563499999967,
+        "p99": 136.11821099999906
+      },
+      "completion_latency_ms": {
+        "samples": 80,
+        "mean": 1310.6774624999998,
+        "p50": 1305.823,
+        "p95": 1750.645,
+        "p99": 1853.575
+      },
+      "queue_wait_ms": {
+        "samples": 80,
+        "mean": 1267.3746000000006,
+        "p50": 1275.375,
+        "p95": 1717.376,
+        "p99": 1825.465
+      },
+      "execution_ms": {
+        "samples": 80,
+        "mean": 16.043312500000006,
+        "p50": 15.527,
+        "p95": 20.624,
+        "p99": 24.14
+      },
+      "extra_attempts": 0,
+      "database_contention": {
+        "lock_wait_samples": 34,
+        "max_lock_waiters": 1,
+        "deadlocks_delta": 0
+      }
+    },
+    {
+      "workers": 1,
+      "schedulers": 2,
+      "worker_threads": 4,
+      "queue_limit": 8,
+      "jobs": 80,
+      "handler": "sleep",
+      "duration_ms": 10,
+      "submission_concurrency": 8,
+      "submission_seconds": 1.1562074999999987,
+      "submission_jobs_per_second": 69.19173245286862,
+      "observed_wall_seconds": 4.279050636999998,
+      "observed_completion_jobs_per_second": 18.69573575695922,
+      "submission_latency_ms": {
+        "samples": 80,
+        "mean": 110.91877291250007,
+        "p50": 105.35683699999936,
+        "p95": 144.41457300000002,
+        "p99": 160.4657720000032
+      },
+      "completion_latency_ms": {
+        "samples": 80,
+        "mean": 881.9241875,
+        "p50": 892.775,
+        "p95": 1673.126,
+        "p99": 1763.865
+      },
+      "queue_wait_ms": {
+        "samples": 80,
+        "mean": 842.6401249999997,
+        "p50": 881.207,
+        "p95": 1592.235,
+        "p99": 1660.12
+      },
+      "execution_ms": {
+        "samples": 80,
+        "mean": -15.336649999999997,
+        "p50": 14.601,
+        "p95": 18.75,
+        "p99": 20.717
+      },
+      "extra_attempts": 0,
+      "database_contention": {
+        "lock_wait_samples": 59,
+        "max_lock_waiters": 0,
+        "deadlocks_delta": 0
+      }
+    },
+    {
+      "workers": 2,
+      "schedulers": 2,
+      "worker_threads": 4,
+      "queue_limit": 8,
+      "jobs": 80,
+      "handler": "sleep",
+      "duration_ms": 10,
+      "submission_concurrency": 8,
+      "submission_seconds": 1.055133085999998,
+      "submission_jobs_per_second": 75.81981937774259,
+      "observed_wall_seconds": 2.2976129489999986,
+      "observed_completion_jobs_per_second": 34.818745269876196,
+      "submission_latency_ms": {
+        "samples": 80,
+        "mean": 101.66612186249999,
+        "p50": 92.04756799999814,
+        "p95": 170.93593800000235,
+        "p99": 193.59115999999995
+      },
+      "completion_latency_ms": {
+        "samples": 80,
+        "mean": 1088.7004124999999,
+        "p50": 1183.704,
+        "p95": 1306.332,
+        "p99": 1340.721
+      },
+      "queue_wait_ms": {
+        "samples": 80,
+        "mean": 1039.7631999999999,
+        "p50": 1128.362,
+        "p95": 1283.159,
+        "p99": 1311.354
+      },
+      "execution_ms": {
+        "samples": 80,
+        "mean": 17.3206125,
+        "p50": 15.735,
+        "p95": 25.594,
+        "p99": 45.345
+      },
+      "extra_attempts": 0,
+      "database_contention": {
+        "lock_wait_samples": 24,
+        "max_lock_waiters": 0,
+        "deadlocks_delta": 0
+      }
+    }
+  ],
+  "cache": {
+    "body_bytes": 49921,
+    "hit_http_ms": {
+      "samples": 100,
+      "mean": 12.21191017999994,
+      "p50": 10.600289000001794,
+      "p95": 20.05832200000077,
+      "p99": 25.887782000001607
+    },
+    "forced_miss_http_ms": {
+      "samples": 100,
+      "mean": 19.07244111999993,
+      "p50": 17.579327999999805,
+      "p95": 29.340822999998636,
+      "p99": 39.23812700000053
+    },
+    "counters": {
+      "configured": true,
+      "available": true,
+      "hits": 100,
+      "misses": 101,
+      "errors": 0,
+      "hit_rate": 0.4975124378109453
+    },
+    "caveat": "Sequential warm hits then forced misses; same API, shared Redis limiter and authentication. Deletion is outside timing. A hit still validates the current PostgreSQL version. No sustained capacity or universal speedup claim."
+  },
+  "recovery": {
+    "kill_to_durable_completion_ms": 15660.247763,
+    "handler_ms": 2000,
+    "attempts": 3,
+    "samples": 1
+  },
+  "events": {
+    "events": 1619,
+    "batches": 17,
+    "publish_seconds": 0.7843655519999957,
+    "publish_events_per_second": 2064.088607501734,
+    "consume_including_group_start_seconds": 5.479845615999999,
+    "observed_consume_events_per_second": 295.4462795946039,
+    "final_observed_lag": 0,
+    "topic_partitions": 3,
+    "replication_factor": 1,
+    "acks": "all",
+    "caveat": "Single local broker; batched send includes PostgreSQL claim and post-ack persistence. Consumer includes group startup and 50ms polling."
+  },
+  "caveat": "Short serial observations on a shared developer laptop. No statistical significance, production capacity, exactly-once effects, or speedup claim. Database contention is sampled after submission; lock spikes can be missed."
+}
