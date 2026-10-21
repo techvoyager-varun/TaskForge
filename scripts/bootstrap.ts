@@ -11,6 +11,8 @@ try {
     ['taskforge_api_login', 'taskforge_api', 'API_DB_PASSWORD'],
     ['taskforge_scheduler_login', 'taskforge_scheduler', 'SCHEDULER_DB_PASSWORD'],
     ['taskforge_worker_login', 'taskforge_worker', 'WORKER_DB_PASSWORD'],
+    ['taskforge_publisher_login', 'taskforge_publisher', 'PUBLISHER_DB_PASSWORD'],
+    ['taskforge_consumer_login', 'taskforge_consumer', 'CONSUMER_DB_PASSWORD'],
   ] as const) {
     const password = process.env[variable];
     if (!password || !/^[a-f0-9]{64}$/.test(password))

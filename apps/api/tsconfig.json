@@ -9,5 +9,10 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "../../packages/contracts/src/**/*.ts", "../../scripts/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../packages/contracts/src/**/*.ts",
+    "../../scripts/**/*.ts",
+    "../events/src/**/*.ts"
+  ]
 }

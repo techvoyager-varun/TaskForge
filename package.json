@@ -9,7 +9,7 @@
   "scripts": {
     "dev:api": "tsx watch apps/api/src/server.ts",
     "dev:web": "vite --config apps/web/vite.config.ts",
-    "build:api": "esbuild apps/api/src/server.ts --bundle --platform=node --packages=external --format=esm --outfile=dist/server.mjs && esbuild scripts/migrate.ts scripts/bootstrap.ts scripts/create-project.ts scripts/rotate-token.ts scripts/retention.ts --bundle --platform=node --packages=external --format=esm --outdir=dist --out-extension:.js=.mjs",
+    "build:api": "esbuild apps/api/src/server.ts --bundle --platform=node --packages=external --format=esm --outfile=dist/server.mjs && esbuild apps/events/src/publisher.ts apps/events/src/consumer.ts --bundle --platform=node --packages=external --format=esm --outdir=dist/events --out-extension:.js=.mjs && esbuild scripts/migrate.ts scripts/bootstrap.ts scripts/create-project.ts scripts/rotate-token.ts scripts/retention.ts --bundle --platform=node --packages=external --format=esm --outdir=dist --out-extension:.js=.mjs",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "build": "npm run build:api && npm run build:web",
     "typecheck": "tsc -p apps/api/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",

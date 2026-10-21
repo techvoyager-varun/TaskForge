@@ -37,7 +37,7 @@ services:
       [
         sh,
         -c,
-        'exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --appendonly no',
+        'exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 128mb --maxmemory-policy noeviction --save "" --appendonly no',
       ]
     restart: unless-stopped
     healthcheck:
@@ -45,6 +45,44 @@ services:
       interval: 3s
       timeout: 2s
       retries: 20
+  kafka-init:
+    image: busybox:1.37.0
+    command: [chown, '1000:1000', /data]
+    volumes:
+      - kafka-data:/data
+    restart: 'no'
+  kafka:
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          '/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    restart: unless-stopped
+    volumes:
+      - kafka-data:/tmp/kraft-combined-logs
   migrate:
     image: taskforge-api:local
     build:
@@ -56,6 +94,8 @@ services:
       API_DB_PASSWORD: ${API_DB_PASSWORD:?Generate .env first}
       SCHEDULER_DB_PASSWORD: ${SCHEDULER_DB_PASSWORD:?Generate .env first}
       WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:?Generate .env first}
+      PUBLISHER_DB_PASSWORD: ${PUBLISHER_DB_PASSWORD:?Generate .env first}
+      CONSUMER_DB_PASSWORD: ${CONSUMER_DB_PASSWORD:?Generate .env first}
     depends_on:
       db:
         condition: service_healthy
@@ -106,6 +146,43 @@ services:
       DATABASE_URL: postgresql://taskforge_worker_login:${WORKER_DB_PASSWORD}@db:5432/taskforge?connect_timeout=3
       WORKER_CONCURRENCY: 4
       WORKER_NAME: cpp-worker
+  publisher:
+    image: taskforge-api:local
+    command: [node, dist/events/publisher.mjs]
+    environment:
+      DATABASE_URL: postgresql://taskforge_publisher_login:${PUBLISHER_DB_PASSWORD}@db:5432/taskforge
+      KAFKA_BROKERS: kafka:9092
+      KAFKAJS_NO_PARTITIONER_WARNING: '1'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+  consumer:
+    image: taskforge-api:local
+    command: [node, dist/events/consumer.mjs]
+    environment:
+      DATABASE_URL: postgresql://taskforge_consumer_login:${CONSUMER_DB_PASSWORD}@db:5432/taskforge
+      KAFKA_BROKERS: kafka:9092
+      KAFKAJS_NO_PARTITIONER_WARNING: '1'
+      PROJECTION_NAMESPACE: live
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
   admin:
     image: taskforge-api:local
     profiles: [tools]
@@ -118,3 +195,4 @@ services:
         condition: service_healthy
 volumes:
   postgres-data:
+  kafka-data:
