@@ -6,7 +6,7 @@ export function decodeCursor(value?:string):{created_at:string;id:string}|null{
  if(!value)return null;
  try{return cursorSchema.parse(JSON.parse(Buffer.from(value,'base64url').toString('utf8')));}catch{throw new HttpError(400,'invalid_cursor','Invalid pagination cursor');}
 }
-export function page<T extends {id:string;created_at:Date}>(rows:T[],limit:number){
+export function page<T extends {id:string;created_at:Date;cursor_created_at?:string}>(rows:T[],limit:number){
  const data=rows.slice(0,limit);const last=data.at(-1);
- return {data,next_cursor:rows.length>limit&&last?Buffer.from(JSON.stringify({created_at:last.created_at.toISOString(),id:last.id})).toString('base64url'):null};
+ return {data,next_cursor:rows.length>limit&&last?Buffer.from(JSON.stringify({created_at:last.cursor_created_at?.replace(" ","T").replace(/([+-][0-9]{2})$/,"$1:00")??last.created_at.toISOString(),id:last.id})).toString('base64url'):null};
 }

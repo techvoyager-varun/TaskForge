@@ -38,7 +38,7 @@ export function jobsRouter(pool:pg.Pool){
  router.get('/',async(req,res)=>{
   const filter=listSchema.parse(req.query);const cursor=decodeCursor(filter.cursor);
   if(filter.status)z.enum(jobStatuses).parse(filter.status);
-  const rows=await pool.query<JobRow>(`SELECT id,type,status,priority,queue_id,workflow_id,node_key,attempt_no,max_attempts,created_at,updated_at,finished_at,error
+  const rows=await pool.query<JobRow>(`SELECT id,type,status,priority,queue_id,workflow_id,node_key,attempt_no,max_attempts,created_at,created_at::text AS cursor_created_at,updated_at,finished_at,error
    FROM jobs WHERE project_id=$1 AND ($2::text IS NULL OR status=$2) AND ($3::uuid IS NULL OR queue_id=$3)
    AND ($4::text IS NULL OR type ILIKE '%'||$4||'%' OR id::text ILIKE $4||'%')
    AND ($5::timestamptz IS NULL OR (created_at,id)<($5::timestamptz,$6::uuid)) ORDER BY created_at DESC,id DESC LIMIT $7`,

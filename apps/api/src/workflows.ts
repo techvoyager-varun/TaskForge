@@ -28,7 +28,7 @@ export function workflowsRouter(pool:pg.Pool){
  router.get('/',async(req,res)=>{
   const filter=listSchema.parse(req.query);const cursor=decodeCursor(filter.cursor);
   if(filter.status)z.enum(['DRAFT','RUNNING','COMPLETED','FAILED','CANCELLED']).parse(filter.status);
-  const result=await pool.query<WorkflowRow>(`SELECT f.*,count(j.id)::integer AS total_nodes,count(j.id) FILTER(WHERE j.status='COMPLETED')::integer AS completed_nodes
+  const result=await pool.query<WorkflowRow>(`SELECT f.*,f.created_at::text AS cursor_created_at,count(j.id)::integer AS total_nodes,count(j.id) FILTER(WHERE j.status='COMPLETED')::integer AS completed_nodes
    FROM workflows f LEFT JOIN jobs j ON j.workflow_id=f.id WHERE f.project_id=$1 AND ($2::text IS NULL OR f.status=$2)
    AND ($3::timestamptz IS NULL OR (f.created_at,f.id)<($3::timestamptz,$4::uuid)) GROUP BY f.id ORDER BY f.created_at DESC,f.id DESC LIMIT $5`,
    [res.locals.project.id,filter.status??null,cursor?.created_at??null,cursor?.id??null,filter.limit+1]);
@@ -88,7 +88,7 @@ export function workflowsRouter(pool:pg.Pool){
   const {rows:[workflow]}=await pool.query('SELECT id,root_workflow_id FROM workflows WHERE id=$1 AND project_id=$2',[id,res.locals.project.id]);
   if(!workflow)throw new HttpError(404,'workflow_not_found','Workflow not found');
   const root=workflow.root_workflow_id??workflow.id;
-  const result=await pool.query<WorkflowRow>(`SELECT f.*,count(j.id)::integer AS total_nodes,count(j.id) FILTER(WHERE j.status='COMPLETED')::integer AS completed_nodes
+  const result=await pool.query<WorkflowRow>(`SELECT f.*,f.created_at::text AS cursor_created_at,count(j.id)::integer AS total_nodes,count(j.id) FILTER(WHERE j.status='COMPLETED')::integer AS completed_nodes
    FROM workflows f LEFT JOIN jobs j ON j.workflow_id=f.id WHERE f.project_id=$1 AND (f.id=$2 OR f.root_workflow_id=$2)
    AND ($3::timestamptz IS NULL OR (f.created_at,f.id)<($3::timestamptz,$4::uuid)) GROUP BY f.id ORDER BY f.created_at DESC,f.id DESC LIMIT $5`,
    [res.locals.project.id,root,cursor?.created_at??null,cursor?.id??null,filter.limit+1]);
