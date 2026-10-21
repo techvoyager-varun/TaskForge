@@ -1,4 +1,4 @@
-name: Build and validate
+name: Build and verify
 on:
   push:
     branches: [main]
@@ -15,6 +15,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-fund --no-audit
+      - run: npm test
       - run: npm run typecheck
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
@@ -25,6 +26,25 @@ jobs:
         sanitizer: ['', address, thread]
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y cmake g++ libpq-dev nlohmann-json3-dev
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ libpq-dev nlohmann-json3-dev libgtest-dev
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DTASKFORGE_SANITIZER=${{ matrix.sanitizer }}
       - run: cmake --build build -j2
+      - name: Run concurrency tests with the selected sanitizer
+        shell: bash
+        run: |
+          set -o pipefail
+          ctest --test-dir build --output-on-failure 2>&1 | tee sanitizer.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ] && [ '${{ matrix.sanitizer }}' = thread ] && grep -q 'ThreadSanitizer: unexpected memory mapping' sanitizer.log; then
+            echo '::warning::ThreadSanitizer runtime is unsupported on this host; this is not a runtime pass.'
+            exit 0
+          fi
+          exit "$status"
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
+      - if: always()
+        run: docker compose -f compose.test.yml down -v

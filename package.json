@@ -14,7 +14,9 @@
     "build": "npm run build:api && npm run build:web",
     "typecheck": "tsc -p apps/api/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "db:migrate": "tsx scripts/migrate.ts",
-    "project:create": "tsx scripts/create-project.ts"
+    "project:create": "tsx scripts/create-project.ts",
+    "test": "node --import tsx --test --test-concurrency=1 tests/unit/*.test.ts",
+    "test:integration": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.9.3",
@@ -22,11 +24,13 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
+    "kafkajs": "^2.2.4",
     "lucide-react": "^0.468.0",
     "pg": "^8.16.3",
     "pino": "^10.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "redis": "^6.3.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {

@@ -3,7 +3,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends g++ make cmake 
 WORKDIR /source
 COPY CMakeLists.txt ./
 COPY services ./services
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF && cmake --build build -j2
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends libpq5 ca-certificates && rm -rf /var/lib/apt/lists/*

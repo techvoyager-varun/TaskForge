@@ -1,0 +1,25 @@
+name: taskforge-test
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: taskforge_test
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U postgres -d taskforge_test]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+  tests:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/test.Dockerfile
+    environment:
+      TEST_DATABASE_URL: postgresql://postgres@db:5432/taskforge_test
+      TEST_CPP_DIR: /source/build
+      LOG_LEVEL: silent
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      [sh, -c, 'ctest --test-dir build --output-on-failure && npm test && npm run test:integration']

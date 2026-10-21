@@ -17,7 +17,7 @@ export function jobsRouter(pool: pg.Pool) {
     const input = jobSchema.parse(req.body);
     const project: string = res.locals.project.id;
     const key = req.get('Idempotency-Key');
-    if (key && !/^[\x21-\x7e]{1,128}$/.test(key))
+    if (key !== undefined && !/^[\x21-\x7e]{1,128}$/.test(key))
       throw new HttpError(
         400,
         'invalid_idempotency_key',
