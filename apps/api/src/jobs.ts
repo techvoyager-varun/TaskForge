@@ -1,3 +1,4 @@
+import type { RedisLayer } from './redis.js';
 import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
@@ -11,7 +12,7 @@ interface JobRow extends pg.QueryResultRow {
   created_at: Date;
   request_hash: string | null;
 }
-export function jobsRouter(pool: pg.Pool) {
+export function jobsRouter(pool: pg.Pool, cache?: RedisLayer) {
   const router = Router();
   router.post('/', async (req, res) => {
     const input = jobSchema.parse(req.body);
@@ -101,19 +102,37 @@ export function jobsRouter(pool: pg.Pool) {
     res.json(page(rows.rows, filter.limit));
   });
   router.get('/:id', async (req, res) => {
-    const id = z.uuid().parse(req.params.id);
+    const id = z.uuid().parse(req.params.id),
+      project: string = res.locals.project.id;
+    // Revalidate against durable state on every read; cache never authorizes a tenant.
+    if (cache) {
+      const {
+        rows: [version],
+      } = await pool.query('SELECT state_version::text FROM jobs WHERE id=$1 AND project_id=$2', [
+        id,
+        project,
+      ]);
+      if (!version) throw new HttpError(404, 'job_not_found', 'Job not found');
+      const cached = await cache.get(project, id, version.state_version);
+      if (cached) {
+        res.set('X-TaskForge-Cache', 'hit');
+        res.json({ data: cached });
+        return;
+      }
+    }
+    // One PostgreSQL snapshot covers job and attempts, including concurrent completions.
     const {
-      rows: [job],
-    } = await pool.query<JobRow>('SELECT * FROM jobs WHERE id=$1 AND project_id=$2', [
-      id,
-      res.locals.project.id,
-    ]);
-    if (!job) throw new HttpError(404, 'job_not_found', 'Job not found');
-    const attempts = await pool.query(
-      'SELECT * FROM job_attempts WHERE job_id=$1 ORDER BY attempt_no',
-      [id],
+      rows: [row],
+    } = await pool.query(
+      `SELECT to_jsonb(j)||jsonb_build_object('attempts',COALESCE((SELECT jsonb_agg(a ORDER BY a.attempt_no) FROM job_attempts a WHERE a.job_id=j.id),'[]'::jsonb)) AS data FROM jobs j WHERE j.id=$1 AND j.project_id=$2`,
+      [id, project],
     );
-    res.json({ data: { ...job, attempts: attempts.rows } });
+    if (!row) throw new HttpError(404, 'job_not_found', 'Job not found');
+    if (cache) {
+      await cache.set(row.data);
+      res.set('X-TaskForge-Cache', 'miss');
+    }
+    res.json({ data: row.data });
   });
   for (const action of ['cancel', 'retry'] as const) {
     router.post(`/:id/${action}`, async (req, res) => {

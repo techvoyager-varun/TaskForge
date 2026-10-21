@@ -1,4 +1,5 @@
 import express from 'express';
+import type { RedisLayer } from './redis.js';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { createHash, randomUUID } from 'node:crypto';
@@ -10,7 +11,11 @@ import { workflowsRouter } from './workflows.js';
 import { operationsRouter } from './operations.js';
 import { HttpError } from './errors.js';
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
-export function createApp(pool: pg.Pool, webDirectory?: string) {
+export function createApp(
+  pool: pg.Pool,
+  webDirectory?: string,
+  options: { redis?: RedisLayer; shutdown?: AbortSignal } = {},
+) {
   const app = express();
   app.disable('x-powered-by');
   app.use(
@@ -52,13 +57,14 @@ export function createApp(pool: pg.Pool, webDirectory?: string) {
   });
   app.use(
     '/api',
-    rateLimit({
-      windowMs: 60000,
-      limit: 300,
-      standardHeaders: 'draft-8',
-      legacyHeaders: false,
-      message: { error: { code: 'rate_limited', message: 'Too many requests; retry later' } },
-    }),
+    options.redis?.limiter() ??
+      rateLimit({
+        windowMs: 60000,
+        limit: 300,
+        standardHeaders: 'draft-8',
+        legacyHeaders: false,
+        message: { error: { code: 'rate_limited', message: 'Too many requests; retry later' } },
+      }),
   );
   app.use(express.json({ limit: '128kb', strict: true }));
   app.use('/api/v1', async (req, res, next) => {
@@ -75,9 +81,9 @@ export function createApp(pool: pg.Pool, webDirectory?: string) {
     res.locals.tokenHash = tokenHash;
     next();
   });
-  app.use('/api/v1/jobs', jobsRouter(pool));
+  app.use('/api/v1/jobs', jobsRouter(pool, options.redis));
   app.use('/api/v1/workflows', workflowsRouter(pool));
-  app.use('/api/v1', operationsRouter(pool));
+  app.use('/api/v1', operationsRouter(pool, options.redis, options.shutdown));
   app.use('/api', (_req, _res, next) =>
     next(new HttpError(404, 'not_found', 'Endpoint not found')),
   );
@@ -93,25 +99,21 @@ export function createApp(pool: pg.Pool, webDirectory?: string) {
         return;
       }
       if (error instanceof z.ZodError) {
-        res
-          .status(400)
-          .json({
-            error: {
-              code: 'validation_error',
-              message: 'Request validation failed',
-              details: error.issues,
-            },
-            request_id: res.locals.requestId,
-          });
+        res.status(400).json({
+          error: {
+            code: 'validation_error',
+            message: 'Request validation failed',
+            details: error.issues,
+          },
+          request_id: res.locals.requestId,
+        });
         return;
       }
       if (error instanceof HttpError) {
-        res
-          .status(error.status)
-          .json({
-            error: { code: error.code, message: error.message, details: error.details },
-            request_id: res.locals.requestId,
-          });
+        res.status(error.status).json({
+          error: { code: error.code, message: error.message, details: error.details },
+          request_id: res.locals.requestId,
+        });
         return;
       }
       const code = (error as { code?: string }).code;
@@ -121,14 +123,12 @@ export function createApp(pool: pg.Pool, webDirectory?: string) {
         return;
       }
       if (status === 400 || status === 413) {
-        res
-          .status(status)
-          .json({
-            error: {
-              code: 'invalid_body',
-              message: status === 413 ? 'Request exceeds 128 KB' : 'Invalid JSON body',
-            },
-          });
+        res.status(status).json({
+          error: {
+            code: 'invalid_body',
+            message: status === 413 ? 'Request exceeds 128 KB' : 'Invalid JSON body',
+          },
+        });
         return;
       }
       logger.error(
@@ -139,15 +139,13 @@ export function createApp(pool: pg.Pool, webDirectory?: string) {
         },
         'request failed',
       );
-      res
-        .status(503)
-        .json({
-          error: {
-            code: 'service_unavailable',
-            message: 'Request could not be confirmed; retry with the same idempotency key',
-          },
-          request_id: res.locals.requestId,
-        });
+      res.status(503).json({
+        error: {
+          code: 'service_unavailable',
+          message: 'Request could not be confirmed; retry with the same idempotency key',
+        },
+        request_id: res.locals.requestId,
+      });
     },
   );
   return app;

@@ -1,3 +1,4 @@
+import type { RedisLayer } from './redis.js';
 import { Router } from 'express';
 import type pg from 'pg';
 import { z } from 'zod';
@@ -32,8 +33,11 @@ export async function snapshot(pool: pg.Pool, project: string) {
     measured_at: new Date().toISOString(),
   };
 }
-export function operationsRouter(pool: pg.Pool) {
+export function operationsRouter(pool: pg.Pool, redis?: RedisLayer, shutdown?: AbortSignal) {
   const router = Router();
+  router.get('/infrastructure', async (_req, res) =>
+    res.json({ data: { redis: redis?.metrics() ?? { configured: false, available: false } } }),
+  );
   router.get('/project', (_req, res) => res.json({ data: res.locals.project }));
   router.post('/queues', async (req, res) => {
     const input = queueSchema.parse(req.body);
@@ -144,6 +148,9 @@ export function operationsRouter(pool: pg.Pool) {
       if (remaining) streams.set(project, remaining);
       else streams.delete(project);
     }
+    const end = () => res.end();
+    shutdown?.addEventListener('abort', end, { once: true });
+    res.once('close', () => shutdown?.removeEventListener('abort', end));
     res.once('close', release);
     let initial;
     try {

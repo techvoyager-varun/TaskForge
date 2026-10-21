@@ -10,12 +10,32 @@ services:
       interval: 1s
       timeout: 3s
       retries: 30
+  redis:
+    image: redis:7.4-alpine
+    command:
+      [
+        redis-server,
+        --save,
+        '',
+        --appendonly,
+        'no',
+        --maxmemory,
+        64mb,
+        --maxmemory-policy,
+        allkeys-lru,
+      ]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 1s
+      timeout: 2s
+      retries: 30
   tests:
     build:
       context: .
       dockerfile: infrastructure/docker/test.Dockerfile
     environment:
       TEST_DATABASE_URL: postgresql://postgres@db:5432/taskforge_test
+      TEST_REDIS_URL: redis://redis:6379
       TEST_CPP_DIR: /source/build
       LOG_LEVEL: silent
     depends_on:
