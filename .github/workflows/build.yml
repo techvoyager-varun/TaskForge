@@ -1,0 +1,30 @@
+name: Build and validate
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-fund --no-audit
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+  cpp:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sanitizer: ['', address, thread]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ libpq-dev nlohmann-json3-dev
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DTASKFORGE_SANITIZER=${{ matrix.sanitizer }}
+      - run: cmake --build build -j2

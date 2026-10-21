@@ -1,0 +1,95 @@
+name: taskforge
+x-engine: &engine
+  image: taskforge-engine:local
+  build:
+    context: .
+    dockerfile: infrastructure/docker/engine.Dockerfile
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 512
+  stop_grace_period: 15s
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: taskforge_owner
+      POSTGRES_DB: taskforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run node scripts/setup-env.mjs first}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U taskforge_owner -d taskforge]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    image: taskforge-api:local
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    command: [node, dist/bootstrap.mjs]
+    environment:
+      ADMIN_DATABASE_URL: postgresql://taskforge_owner:${POSTGRES_PASSWORD}@db:5432/taskforge
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?Generate .env first}
+      SCHEDULER_DB_PASSWORD: ${SCHEDULER_DB_PASSWORD:?Generate .env first}
+      WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:?Generate .env first}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+  api:
+    image: taskforge-api:local
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    environment:
+      DATABASE_URL: postgresql://taskforge_api_login:${API_DB_PASSWORD}@db:5432/taskforge
+      HOST: 0.0.0.0
+      PORT: 3000
+    ports:
+      - 127.0.0.1:${HTTP_PORT:-3000}:3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3000/health/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+  scheduler:
+    <<: *engine
+    command: [/app/taskforge-scheduler]
+    environment:
+      DATABASE_URL: postgresql://taskforge_scheduler_login:${SCHEDULER_DB_PASSWORD}@db:5432/taskforge?connect_timeout=3
+  worker:
+    <<: *engine
+    command: [/app/taskforge-worker]
+    environment:
+      DATABASE_URL: postgresql://taskforge_worker_login:${WORKER_DB_PASSWORD}@db:5432/taskforge?connect_timeout=3
+      WORKER_CONCURRENCY: 4
+      WORKER_NAME: cpp-worker
+  admin:
+    image: taskforge-api:local
+    profiles: [tools]
+    entrypoint: [node, dist/create-project.mjs]
+    command: [TaskForge]
+    environment:
+      ADMIN_DATABASE_URL: postgresql://taskforge_owner:${POSTGRES_PASSWORD}@db:5432/taskforge
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres-data:
