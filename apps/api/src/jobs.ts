@@ -57,6 +57,7 @@ export function jobsRouter(pool:pg.Pool){
    const id=z.uuid().parse(req.params.id);
    const {rows:[row]}=await pool.query<{state:string|null}>(`SELECT ${action}_job($1::uuid,$2::uuid) AS state`,[res.locals.project.id,id]);
    if(!row?.state)throw new HttpError(404,'job_not_found','Job not found');
+   if(row.state==='QUOTA')throw new HttpError(429,'project_quota','Project has reached its 10000 active-job quota');
    if(row.state==='CONFLICT')throw new HttpError(409,'retry_conflict','Only cancelled or dead-lettered standalone jobs can be retried; workflow retries create a new execution');
    res.json({data:{id,status:row.state}});
   });

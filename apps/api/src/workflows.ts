@@ -56,6 +56,8 @@ export function workflowsRouter(pool:pg.Pool){
  router.post('/:id/cancel',async(req,res)=>{
   const id=z.uuid().parse(req.params.id);
   await transaction(pool,async client=>{
+   // Serialize with maintenance before taking workflow or job locks.
+   await client.query('SELECT pg_advisory_xact_lock(8761234001)');
    const {rows:[workflow]}=await client.query('SELECT * FROM workflows WHERE id=$1 AND project_id=$2 FOR UPDATE',[id,res.locals.project.id]);
    if(!workflow)throw new HttpError(404,'workflow_not_found','Workflow not found');
    const jobs=await client.query<{id:string}>('SELECT id FROM jobs WHERE workflow_id=$1 ORDER BY id',[id]);
